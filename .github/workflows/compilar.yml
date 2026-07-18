@@ -1,0 +1,38 @@
+name: Fabrica Automatica de Vita
+
+on:
+  push:
+    branches: [ main ] # Se activa cada vez que guardas cambios
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # Enciende una PC virtual con Linux
+
+    steps:
+    - name: Descargar codigo del usuario
+      uses: actions/checkout@v4
+
+    - name: Instalar el compilador de PS Vita (VitaSDK)
+      uses: vitasdk/vitasdk-action@v1
+      with:
+        build-type: 'softfp' # IMPORTANTE: Activa el modo compatible con juegos de Android
+
+    - name: Compilar el Port y empaquetar VPK
+      run: |
+        # Estos comandos los lee el servidor en la nube de forma interna
+        if [ -f main.c ]; then
+          arm-vita-eabi-gcc main.c -o amongus.elf -lSceDisplay_stub -lSceSysmodule_stub
+          vita-make-fself amongus.elf eboot.bin
+          vita-mksfoex -s TITLE_ID="AMONG0001" "Among Us Vita Port" param.sfo
+          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
+        else
+          echo "Aun no creamos el archivo main.c, creando un VPK de prueba vacio..."
+          touch eboot.bin param.sfo
+          vita-pack-vpk -b eboot.bin amongus_2020.vpk
+        fi
+
+    - name: Subir el instalador .VPK final
+      uses: actions/upload-artifact@v4
+      with:
+        name: AmongUs_Vita_Instalador
+        path: amongus_2020.vpk
