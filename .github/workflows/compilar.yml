@@ -1,35 +1,37 @@
 name: Fabrica Automatica de Vita
 
 on:
-  push:
-    branches: [ main ]
+push:
+branches: [ main ] # Se activa con cualquier cambio guardado en la rama principal
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    # Usamos un contenedor pre-hecho por la comunidad que ya tiene VitaSDK e instalado vita2d
-    container: vitasdk/vitasdk:latest
+build:
+runs-on: ubuntu-latest # Usamos una maquina limpia de Ubuntu en la nube
 
-    steps:
-    - name: Descargar codigo del usuario
-      uses: actions/checkout@v4
+steps:
+- name: 1. Descargar codigo del usuario
+  uses: actions/checkout@v4
 
-    - name: Compilar el Port y empaquetar VPK
-      run: |
-        # Compilamos nuestro main.c usando las herramientas que ya viven dentro del contenedor
-        arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
-        
-        # Generamos el ejecutable seguro de la Vita
-        vita-make-fself amongus.elf eboot.bin
-        
-        # Creamos el archivo de informacion de la burbuja
-        vita-mksfo "Among Us Vita Port" param.sfo
-        
-        # Empaquetamos todo en el instalador .vpk
-        vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
+- name: 2. Mostrar archivos (Para asegurar que main.c esta en su lugar)
+  run: |
+    echo "Verificando archivos en la raiz:"
+    ls -la
 
-    - name: Subir el instalador .VPK final
-      uses: actions/upload-artifact@v4
-      with:
-        name: AmongUs_Vita_Instalador
-        path: amongus_2020.vpk
+- name: 3. Compilar usando Docker de forma controlada
+  run: |
+    # Levantamos el contenedor oficial de VitaSDK
+    # Montamos nuestra carpeta de trabajo en '/build' y forzamos a que esa sea la ruta activa
+    docker run --rm -v ${{ github.workspace }}:/build -w /build vitasdk/vitasdk:latest sh -c "
+      echo '=== Iniciando Compilacion en la Nube ==='
+      
+      # Compilamos enlazando las librerias graficas necesarias
+      arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
+      
+      # Convertimos el ELF en ejecutable binario de PS Vita
+      vita-make-fself amongus.elf eboot.bin
+      
+      # Creamos el archivo de metadatos (Titulo y ID de la aplicacion)
+      vita-mksfo 'Among Us Vita Port' param.sfo
+      
+      # Empaquetamos todo dentro del archivo .VPK final
+      vita-pack-vpk -s param.sfo -b eboot.bin
