@@ -2,34 +2,36 @@ name: Fabrica Automatica de Vita
 
 on:
   push:
-    branches: [ main ] # Se activa cada vez que guardas cambios
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Enciende una PC virtual con Linux
+    runs-on: ubuntu-latest
 
     steps:
     - name: Descargar codigo del usuario
       uses: actions/checkout@v4
 
     - name: Instalar el compilador de PS Vita (VitaSDK)
-      uses: vitasdk/vitasdk-action@v1
+      uses: vitasdk/vdpm-action@v2
       with:
-        build-type: 'softfp' # IMPORTANTE: Activa el modo compatible con juegos de Android
+        # Le decimos a la nube que instale vita2d para poder pintar el texto
+        dependencies: |
+          vita2dlib
 
     - name: Compilar el Port y empaquetar VPK
       run: |
-        # Estos comandos los lee el servidor en la nube de forma interna
-        if [ -f main.c ]; then
-          arm-vita-eabi-gcc main.c -o amongus.elf -lSceDisplay_stub -lSceSysmodule_stub
-          vita-make-fself amongus.elf eboot.bin
-          vita-mksfoex -s TITLE_ID="AMONG0001" "Among Us Vita Port" param.sfo
-          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
-        else
-          echo "Aun no creamos el archivo main.c, creando un VPK de prueba vacio..."
-          touch eboot.bin param.sfo
-          vita-pack-vpk -b eboot.bin amongus_2020.vpk
-        fi
+        # Compilamos enlazando las librerías de gráficos y fuentes de la Vita
+        arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
+        
+        # Convertimos el resultado en el ejecutable eboot.bin
+        vita-make-fself amongus.elf eboot.bin
+        
+        # Creamos la información del juego (ID y Nombre de la burbuja)
+        vita-mksfo "Among Us Vita Port" param.sfo
+        
+        # Lo metemos todo dentro del instalador .vpk
+        vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
 
     - name: Subir el instalador .VPK final
       uses: actions/upload-artifact@v4
