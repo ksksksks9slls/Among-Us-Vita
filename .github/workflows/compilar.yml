@@ -7,50 +7,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Usamos un contenedor pre-hecho por la comunidad que ya tiene VitaSDK e instalado vita2d
+    container: vitasdk/vitasdk:latest
 
     steps:
     - name: Descargar codigo del usuario
       uses: actions/checkout@v4
 
-    - name: Instalar herramientas del sistema necesarias
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y make cmake git textinfo bison flex libtool libtool-bin autopoint homepage
-
-    - name: Descargar e Instalar VitaSDK Manualmente
-      run: |
-        # Creamos la carpeta para el compilador y la añadimos a las variables de entorno
-        sudo mkdir -p /usr/local/vitasdk
-        sudo chown -R $USER:$GROUP /usr/local/vitasdk
-        
-        # Descargamos el instalador oficial directo e instalamos las herramientas base
-        git clone https://github.com/vitasdk/vdpm.git
-        cd vdpm
-        export VITASDK=/usr/local/vitasdk
-        export PATH=$VITASDK/bin:$PATH
-        
-        # Instalamos las herramientas esenciales de empaquetado (vita-pack-vpk, vita-mksfo, etc)
-        ./bootstrap.sh
-        ./build-all.sh toolchain
-        ./build-all.sh vita-toolchain
-        
-        # Instalamos la libreria grafica vita2d para nuestro Hola Mundo
-        ./build-all.sh vita2dlib
-
     - name: Compilar el Port y empaquetar VPK
       run: |
-        # Volvemos a registrar las rutas del compilador para este paso
-        export VITASDK=/usr/local/vitasdk
-        export PATH=$VITASDK/bin:$PATH
-        
-        # Compilamos nuestro main.c enlazando las librerias graficas
+        # Compilamos nuestro main.c usando las herramientas que ya viven dentro del contenedor
         arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
         
-        # Generamos el eboot y el param.sfo de la burbuja
+        # Generamos el ejecutable seguro de la Vita
         vita-make-fself amongus.elf eboot.bin
+        
+        # Creamos el archivo de informacion de la burbuja
         vita-mksfo "Among Us Vita Port" param.sfo
         
-        # Creamos el instalador final .vpk
+        # Empaquetamos todo en el instalador .vpk
         vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
 
     - name: Subir el instalador .VPK final
