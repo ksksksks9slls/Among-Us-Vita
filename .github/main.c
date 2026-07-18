@@ -1,46 +1,45 @@
 #include <vitasdk.h>
-#include <vita2d.h> // Incluimos la librería gráfica para pintar en pantalla
+#include <vita2d.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-// Reservamos 192MB de memoria RAM para el juego (suficiente para los archivos de Android)
+// Reservamos 192MB de memoria RAM para el juego
 int _newlib_heap_size_user = 192 * 1024 * 1024;
 
 int main(int argc, char *argv[]) {
-    // 1. Inicializamos la librería gráfica de la Vita
+    // Inicializar la librería gráfica obligatoria de la Vita
     vita2d_init();
     
-    // Configuramos el color de fondo en negro absoluto (Rojo=0, Verde=0, Azul=0, Alfa=255)
+    // Configurar el fondo de la pantalla a color negro absoluto
     vita2d_set_clear_color(RGBA8(0, 0, 0, 255));
 
-    // Cargamos la fuente de texto por defecto que trae el sistema de la PS Vita
+    // Cargar los archivos de fuentes de texto que el sistema operativo de la Vita trae por defecto
     vita2d_pgf *fuente_sistema = vita2d_load_default_pgf();
 
-    // 2. El bucle principal del juego
+    // Bucle infinito: mantiene la consola corriendo el juego a 60 FPS estables
     while (1) {
-        // Iniciamos el dibujo del cuadro actual en la pantalla
+        // Empezar a renderizar el frame actual
         vita2d_start_drawing();
-        vita2d_clear_screen(); // Limpia la pantalla dejándola en negro absoluto
+        vita2d_clear_screen();
 
-        // PINTAMOS EL TEXTO EN LA PANTALLA
-        // Parámetros: (fuente, posición X, posición Y, color en RGBA, tamaño, "Texto")
-        // Ponemos X=400 e Y=270 para que quede centrado en la pantalla de la Vita (960x544)
+        // Pintar el texto en la mitad de la pantalla (resolución de la Vita: 960x544)
         vita2d_pgf_draw_text(
             fuente_sistema, 
-            350, 270, 
-            RGBA8(255, 255, 255, 255), // Texto en color blanco brillante
-            1.5f,                      // Tamaño de la letra (escala)
+            300, 270, 
+            RGBA8(255, 255, 255, 255), // Letras en blanco brillante
+            1.5f,                      // Tamaño del texto
             "Hola Mundo! Wrapper de Among Us"
         );
 
-        // Terminamos de dibujar y mandamos el cuadro a la pantalla física de la Vita
+        // Finalizar el dibujado y enviar la señal física a la pantalla
         vita2d_end_drawing();
-        vita2d_swap_buffers(); // Intercambia los buffers de video para evitar parpadeos
-
-        // Sincroniza a 60 cuadros por segundo para que la consola no se sobrecaliente
+        vita2d_swap_buffers();
+        
+        // Evita que el procesador trabaje de más sincronizando los ciclos de la pantalla
         sceDisplayWaitVblankStart();
     }
 
-    // 3. Limpieza de memoria (por buena práctica de programación)
+    // Código de cierre (por si en algún momento se sale del bucle infinito)
     vita2d_fini();
     vita2d_free_pgf(fuente_sistema);
     
