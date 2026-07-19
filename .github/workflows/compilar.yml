@@ -28,7 +28,7 @@ jobs:
           ls -la
           test -f main.c || { echo "ERROR: falta main.c en la raiz"; exit 1; }
 
-      # 3) Compila TODO dentro del contenedor oficial de VitaSD
+      # 3) Compila TODO dentro del contenedor oficial de Vita
       - name: Compilar dentro del contenedor VitaSDK
         run: |
           docker run --rm \
