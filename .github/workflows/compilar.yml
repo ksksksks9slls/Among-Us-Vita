@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
 
     steps:
       # 1) Clona el repo de forma limpia
@@ -28,7 +28,7 @@ jobs:
           ls -la
           test -f main.c || { echo "ERROR: falta main.c en la raiz"; exit 1; }
 
-      # 3) Compila TODO dentro del contenedor oficial de VitaSDK
+      # 3) Compila TODO dentro del contenedor oficial de VitaSD
       - name: Compilar dentro del contenedor VitaSDK
         run: |
           docker run --rm \
@@ -52,6 +52,7 @@ jobs:
                 -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub \
                 -lSceCtrl_stub -lScePgf_stub \
                 -lSceCommonDialog_stub -lSceSysmem_stub \
+                -lSceSharedFb_stub \
                 -lfreetype -lpng16 -ljpeg -lz \
                 -lm -lc
 
