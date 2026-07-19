@@ -9,37 +9,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Paso 1: Descargar el código de tu repositorio a la máquina virtual
+    # Paso 1: Descargar el código del repositorio
     - name: Descargar codigo del usuario
       uses: actions/checkout@v4
 
-    # Paso 2: Ejecutar la compilación usando un entorno que comparte las carpetas de origen
+    # Paso 2: Compilar asegurando que los archivos se guarden en la ruta compartida
     - name: Compilar VPK en entorno VitaSDK
       uses: addnab/docker-run-action@v3
       with:
         image: vitasdk/vitasdk:latest
-        # Vinculamos la carpeta de trabajo actual con el interior del contenedor
         options: -v ${{ github.workspace }}:/workspace -w /workspace
         run: |
-          echo "=== Iniciando compilacion dentro del contenedor ==="
+          echo "=== Compilando codigo fuente ==="
+          arm-vita-eabi-gcc main.c -o /workspace/amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
           
-          # Compilamos el archivo main.c enlazando las librerías gráficas de la Vita
-          arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
+          echo "=== Creando binarios firmados ==="
+          vita-make-fself /workspace/amongus.elf /workspace/eboot.bin
+          vita-mksfo "Among Us Vita Port" /workspace/param.sfo
           
-          # Generamos el ejecutable eboot.bin firmado para la consola
-          vita-make-fself amongus.elf eboot.bin
-          
-          # Creamos el archivo de configuración de la burbuja (param.sfo)
-          vita-mksfo "Among Us Vita Port" param.sfo
-          
-          # Empaquetamos todo en el archivo instalador final .vpk
-          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
-          
-          echo "=== VPK creado con exito ==="
+          echo "=== Empaquetando instalador VPK ==="
+          vita-pack-vpk -s /workspace/param.sfo -b /workspace/eboot.bin /workspace/amongus_2020.vpk
+          echo "=== Proceso en contenedor finalizado ==="
 
-    # Paso 3: Subir el archivo .vpk a la pestaña Actions para que lo descargues
+    # Paso 3: Desbloquear los permisos del archivo creado por Docker
+    - name: Liberar permisos del archivo VPK
+      run: |
+        echo "=== Modificando permisos de archivos creados ==="
+        sudo chmod 777 ${{ github.workspace }}/amongus_2020.vpk || echo "El archivo no requiere cambios de permisos"
+
+    # Paso 4: Subir el instalador final listo para descargar
     - name: Subir el instalador .VPK final
       uses: actions/upload-artifact@v4
       with:
         name: AmongUs_Vita_Instalador
-        path: amongus_2020.vpk
+        path: ${{ github.workspace }}/amongus_2020.vpk
