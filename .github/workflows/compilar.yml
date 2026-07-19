@@ -1,45 +1,96 @@
-name: Fabrica Automatica de Vita
+name: Compilar VPK - Among Us Vita
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:   # lanzarlo a mano desde la pestaña Actions
+
+# Evita builds duplicados si pusheas varias veces seguidas
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    # Paso 1: Descargar tu código
-    - name: Descargar codigo del usuario
-      uses: actions/checkout@v4
+      # 1) Clona el repo de forma limpia
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
 
-    # Paso 2: Compilar usando Docker nativo de Linux
-    # Forzamos al contenedor a correr con los mismos permisos de usuario (uid) de la máquina virtual
-    # Así los archivos que cree pertenecerán a GitHub y se guardarán directamente en tu carpeta
-    - name: Compilar VPK con Docker Nativo
-      run: |
-        docker run --rm -u $(id -u):$(id -g) -v "$PWD":/workspace -w /workspace vitasdk/vitasdk:latest sh -c "
-          echo '=== Iniciando Compilacion Nativa ===' &&
-          arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm &&
-          vita-make-fself amongus.elf eboot.bin &&
-          vita-mksfo 'Among Us Vita Port' param.sfo &&
-          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk &&
-          echo '=== Archivos generados en la carpeta shared ==='
-        "
+      # 2) Verifica que main.c exista antes de gastar tiempo en Docker
+      - name: Comprobar fuentes
+        run: |
+          echo "==> Archivos en la raiz:"
+          ls -la
+          test -f main.c || { echo "ERROR: falta main.c en la raiz"; exit 1; }
 
-    # Paso 3: Verificar físicamente si el archivo se creó en la máquina virtual antes de subirlo
-    - name: Verificar existencia del VPK
-      run: |
-        echo "=== Comprobando archivos reales ==="
-        ls -la
-        if [ ! -f amongus_2020.vpk ]; then
-          echo "ERROR: El empaquetador no dejó el archivo en la raíz del host."
-          exit 1
-        fi
+      # 3) Compila TODO dentro del contenedor oficial de VitaSDK
+      - name: Compilar dentro del contenedor VitaSDK
+        run: |
+          docker run --rm \
+            -v "$PWD":/workspace \
+            -u $(id -u):$(id -g) \
+            -w /workspace \
+            -e HOME=/tmp \
+            vitasdk/vitasdk:latest \
+            /bin/bash -c '
+              set -euo pipefail
+              export VITASDK=/usr/local/vitasdk
+              export PATH=$VITASDK/bin:$PATH
 
-    # Paso 4: Subir el instalador final listo para descargar
-    - name: Subir el instalador .VPK final
-      uses: actions/upload-artifact@v4
-      with:
-        name: AmongUs_Vita_Instalador
-        path: amongus_2020.vpk
+              echo "==> Version del toolchain:"
+              arm-vita-eabi-gcc --version | head -n 1
+
+              echo "==> [1/4] Compilando main.c -> amongus.elf"
+              arm-vita-eabi-gcc main.c -o amongus.elf \
+                -Wl,-q -Wall -O2 -std=c11 \
+                -lvita2d \
+                -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub \
+                -lSceCtrl_stub -lScePgf_stub \
+                -lSceCommonDialog_stub -lSceSysmem_stub \
+                -lfreetype -lpng16 -ljpeg -lz \
+                -lm -lc
+
+              echo "==> [2/4] Convirtiendo ELF -> eboot.bin (unsafe, requiere heap grande)"
+              vita-elf-create amongus.elf amongus.velf
+              vita-make-fself amongus.velf eboot.bin
+
+              echo "==> [3/4] Generando param.sfo"
+              vita-mksfo "Among Us Vita Port" param.sfo
+
+              echo "==> [4/4] Empaquetando VPK final"
+              vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
+
+              echo "==> Compilacion terminada OK"
+            '
+
+      # 4) Verifica que el VPK exista en la raíz del host
+      - name: Verificar archivos generados
+        run: |
+          echo "==> Contenido de la raiz tras compilar:"
+          ls -la
+          test -f amongus_2020.vpk || { echo "ERROR: no se genero el VPK"; exit 1; }
+          echo "==> Tamano del VPK:"
+          du -h amongus_2020.vpk
+
+      # 5) Sube el VPK a Artifacts
+      - name: Subir artefacto VPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: amongus_2020-vpk
+          path: amongus_2020.vpk
+          if-no-files-found: error
+          retention-days: 30
+
+      # 6) (Opcional) sube tambien el ELF para depurar crashes
+      - name: Subir ELF de depuracion
+        uses: actions/upload-artifact@v4
+        with:
+          name: amongus-debug-elf
+          path: amongus.elf
+          if-no-files-found: warn
+          retention-days: 7
