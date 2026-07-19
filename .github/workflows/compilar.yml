@@ -9,37 +9,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Paso 1: Descargar el código del repositorio
+    # Paso 1: Descargar tu código
     - name: Descargar codigo del usuario
       uses: actions/checkout@v4
 
-    # Paso 2: Compilar asegurando que los archivos se guarden en la ruta compartida
-    - name: Compilar VPK en entorno VitaSDK
-      uses: addnab/docker-run-action@v3
-      with:
-        image: vitasdk/vitasdk:latest
-        options: -v ${{ github.workspace }}:/workspace -w /workspace
-        run: |
-          echo "=== Compilando codigo fuente ==="
-          arm-vita-eabi-gcc main.c -o /workspace/amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
-          
-          echo "=== Creando binarios firmados ==="
-          vita-make-fself /workspace/amongus.elf /workspace/eboot.bin
-          vita-mksfo "Among Us Vita Port" /workspace/param.sfo
-          
-          echo "=== Empaquetando instalador VPK ==="
-          vita-pack-vpk -s /workspace/param.sfo -b /workspace/eboot.bin /workspace/amongus_2020.vpk
-          echo "=== Proceso en contenedor finalizado ==="
-
-    # Paso 3: Desbloquear los permisos del archivo creado por Docker
-    - name: Liberar permisos del archivo VPK
+    # Paso 2: Compilar usando Docker nativo de Linux
+    # Forzamos al contenedor a correr con los mismos permisos de usuario (uid) de la máquina virtual
+    # Así los archivos que cree pertenecerán a GitHub y se guardarán directamente en tu carpeta
+    - name: Compilar VPK con Docker Nativo
       run: |
-        echo "=== Modificando permisos de archivos creados ==="
-        sudo chmod 777 ${{ github.workspace }}/amongus_2020.vpk || echo "El archivo no requiere cambios de permisos"
+        docker run --rm -u $(id -u):$(id -g) -v "$PWD":/workspace -w /workspace vitasdk/vitasdk:latest sh -c "
+          echo '=== Iniciando Compilacion Nativa ===' &&
+          arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm &&
+          vita-make-fself amongus.elf eboot.bin &&
+          vita-mksfo 'Among Us Vita Port' param.sfo &&
+          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk &&
+          echo '=== Archivos generados en la carpeta shared ==='
+        "
+
+    # Paso 3: Verificar físicamente si el archivo se creó en la máquina virtual antes de subirlo
+    - name: Verificar existencia del VPK
+      run: |
+        echo "=== Comprobando archivos reales ==="
+        ls -la
+        if [ ! -f amongus_2020.vpk ]; then
+          echo "ERROR: El empaquetador no dejó el archivo en la raíz del host."
+          exit 1
+        fi
 
     # Paso 4: Subir el instalador final listo para descargar
     - name: Subir el instalador .VPK final
       uses: actions/upload-artifact@v4
       with:
         name: AmongUs_Vita_Instalador
-        path: ${{ github.workspace }}/amongus_2020.vpk
+        path: amongus_2020.vpk
