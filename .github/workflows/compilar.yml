@@ -9,37 +9,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Paso 1: Descargar el código que tienes en tu repositorio a la máquina virtual
-    - name: 1. Clonar el repositorio del usuario
+    # Paso 1: Descargar el código de tu repositorio a la máquina virtual
+    - name: Descargar codigo del usuario
       uses: actions/checkout@v4
 
-    # Paso 2: Verificar en la consola si los archivos realmente existen antes de continuar
-    # Esto nos sirve para auditar el proceso y ver que main.c está en su sitio
-    - name: 2. Verificar estructura de archivos
-      run: |
-        echo "=== Listando archivos en la raiz ==="
-        ls -la
-        if [ ! -f main.c ]; then
-          echo "ERROR CRITICO: main.c no esta en la raiz."
-        fi
-
-    # Paso 3: Compilar el código usando la herramienta oficial de la Scene sin depender de configuraciones raras
-    # Usamos la imagen precompilada ejecutando comandos nativos de Linux directamente dentro de su volumen
-    - name: 3. Ejecutar compilacion en contenedor controlado
-      uses: docker://vitasdk/vitasdk:latest
+    # Paso 2: Ejecutar la compilación usando un entorno que comparte las carpetas de origen
+    - name: Compilar VPK en entorno VitaSDK
+      uses: addnab/docker-run-action@v3
       with:
-        args: >
-          sh -c "
-          echo '=== Entrando al contenedor ===' &&
-          arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm &&
-          vita-make-fself amongus.elf eboot.bin &&
-          vita-mksfo 'Among Us Vita Port' param.sfo &&
-          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk &&
-          echo '=== VPK empaquetado con exito ==='
-          "
+        image: vitasdk/vitasdk:latest
+        # Vinculamos la carpeta de trabajo actual con el interior del contenedor
+        options: -v ${{ github.workspace }}:/workspace -w /workspace
+        run: |
+          echo "=== Iniciando compilacion dentro del contenedor ==="
+          
+          # Compilamos el archivo main.c enlazando las librerías gráficas de la Vita
+          arm-vita-eabi-gcc main.c -o amongus.elf -lvita2d -lSceDisplay_stub -lSceGxm_stub -lSceSysmodule_stub -lSceCtrl_stub -lScePgf_stub -lm
+          
+          # Generamos el ejecutable eboot.bin firmado para la consola
+          vita-make-fself amongus.elf eboot.bin
+          
+          # Creamos el archivo de configuración de la burbuja (param.sfo)
+          vita-mksfo "Among Us Vita Port" param.sfo
+          
+          # Empaquetamos todo en el archivo instalador final .vpk
+          vita-pack-vpk -s param.sfo -b eboot.bin amongus_2020.vpk
+          
+          echo "=== VPK creado con exito ==="
 
-    # Paso 4: Tomar el archivo .vpk resultante y subirlo a la pestaña Actions para que lo descargues
-    - name: 4. Subir el instalador final .VPK
+    # Paso 3: Subir el archivo .vpk a la pestaña Actions para que lo descargues
+    - name: Subir el instalador .VPK final
       uses: actions/upload-artifact@v4
       with:
         name: AmongUs_Vita_Instalador
